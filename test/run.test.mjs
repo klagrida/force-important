@@ -220,3 +220,224 @@ test('an empty folder is a clean no-op', async () => {
     assert.match(r.stdout, /0 scanned, 0 changed/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// force-important.json
+// ---------------------------------------------------------------------------
+
+const SCSS = '.t { color: red; }\n';
+
+// Lays out a small tree used by the config tests:
+//   src/app/a.scss  src/app/_variables.scss  src/legacy/old.scss
+//   src/theme.scss  vendor/lib/v.scss        node_modules/pkg/n.scss
+async function project(dir) {
+  const files = [
+    'src/app/a.scss',
+    'src/app/_variables.scss',
+    'src/legacy/old.scss',
+    'src/theme.scss',
+    'vendor/lib/v.scss',
+    'node_modules/pkg/n.scss',
+  ];
+  for (const rel of files) {
+    await mkdir(dirname(join(dir, rel)), { recursive: true });
+    await writeFile(join(dir, rel), SCSS);
+  }
+  return files;
+}
+
+const writeConfig = (dir, config) =>
+  writeFile(join(dir, 'force-important.json'), JSON.stringify(config, null, 2));
+
+// Reads back which .scss files still hold their original, untransformed content.
+async function untouched(dir, files) {
+  const out = [];
+  for (const rel of files) {
+    if (norm(await readFile(join(dir, rel), 'utf8')) === SCSS) out.push(rel);
+  }
+  return out.sort();
+}
+
+test('no config file: nothing is announced and defaults apply', async () => {
+  await withSandbox(async (dir) => {
+    const files = await project(dir);
+    const r = await runCli(dir);
+
+    assert.equal(r.code, 0);
+    assert.doesNotMatch(r.stdout, /config:/);
+    assert.match(r.stdout, /5 scanned, 5 changed/); // node_modules excluded
+    assert.deepEqual(await untouched(dir, files), ['node_modules/pkg/n.scss']);
+  });
+});
+
+test('ignoreFolders: a slashless name matches that folder at any depth', async () => {
+  await withSandbox(async (dir) => {
+    const files = await project(dir);
+    await writeConfig(dir, { ignoreFolders: ['vendor'] });
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 0);
+    assert.match(r.stdout, /config: force-important\.json — 1 folder, 0 files/);
+    assert.match(r.stdout, /4 scanned, 4 changed/);
+    assert.deepEqual(await untouched(dir, files), [
+      'node_modules/pkg/n.scss',
+      'vendor/lib/v.scss',
+    ]);
+  });
+});
+
+test('ignoreFolders: a path with a slash is anchored to the root', async () => {
+  await withSandbox(async (dir) => {
+    const files = await project(dir);
+    // a sibling of the same name elsewhere must still be processed
+    await mkdir(join(dir, 'other/legacy'), { recursive: true });
+    await writeFile(join(dir, 'other/legacy/keep.scss'), SCSS);
+    await writeConfig(dir, { ignoreFolders: ['src/legacy'] });
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 0);
+    assert.deepEqual(await untouched(dir, [...files, 'other/legacy/keep.scss']), [
+      'node_modules/pkg/n.scss',
+      'src/legacy/old.scss',
+    ]);
+  });
+});
+
+test('ignoreFiles: a bare filename matches at any depth', async () => {
+  await withSandbox(async (dir) => {
+    const files = await project(dir);
+    await writeConfig(dir, { ignoreFiles: ['_variables.scss'] });
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 0);
+    assert.match(r.stdout, /config: force-important\.json — 0 folders, 1 file/);
+    assert.deepEqual(await untouched(dir, files), [
+      'node_modules/pkg/n.scss',
+      'src/app/_variables.scss',
+    ]);
+  });
+});
+
+test('ignoreFiles: a path with a slash is anchored to the root', async () => {
+  await withSandbox(async (dir) => {
+    const files = await project(dir);
+    await writeConfig(dir, { ignoreFiles: ['src/theme.scss'] });
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 0);
+    assert.deepEqual(await untouched(dir, files), [
+      'node_modules/pkg/n.scss',
+      'src/theme.scss',
+    ]);
+  });
+});
+
+test('config extends the built-in ignore list, it cannot shrink it', async () => {
+  await withSandbox(async (dir) => {
+    const files = await project(dir);
+    // even an explicit attempt to re-include node_modules must not work
+    await writeConfig(dir, { ignoreFolders: ['vendor'], ignoreFiles: ['src/theme.scss'] });
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 0);
+    assert.deepEqual(await untouched(dir, files), [
+      'node_modules/pkg/n.scss',
+      'src/theme.scss',
+      'vendor/lib/v.scss',
+    ]);
+  });
+});
+
+test('an unknown key warns but the run proceeds', async () => {
+  await withSandbox(async (dir) => {
+    await project(dir);
+    await writeConfig(dir, { ignoreFolders: ['vendor'], ignoreDirs: ['oops'] });
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 0);
+    assert.match(r.stderr, /unknown key "ignoreDirs" — ignored/);
+    assert.match(r.stdout, /4 scanned, 4 changed/);
+  });
+});
+
+test('a folder that does not exist warns but the run proceeds', async () => {
+  await withSandbox(async (dir) => {
+    await project(dir);
+    await writeConfig(dir, { ignoreFolders: ['src/legcay'] });
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 0);
+    assert.match(r.stderr, /ignoreFolders: "src\/legcay" — no such directory/);
+    assert.match(r.stdout, /5 scanned, 5 changed/);
+  });
+});
+
+test('a file pattern matching nothing warns but the run proceeds', async () => {
+  await withSandbox(async (dir) => {
+    await project(dir);
+    await writeConfig(dir, { ignoreFiles: ['not-here.scss'] });
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 0);
+    assert.match(r.stderr, /ignoreFiles: "not-here\.scss" — matched no files/);
+    assert.match(r.stdout, /5 scanned, 5 changed/);
+  });
+});
+
+test('an explicit glob matching nothing is silent', async () => {
+  await withSandbox(async (dir) => {
+    await project(dir);
+    await writeConfig(dir, { ignoreFiles: ['**/nope-*.scss'] });
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 0);
+    assert.doesNotMatch(r.stderr, /matched no files/);
+  });
+});
+
+test('a file listed under ignoreFolders aborts', async () => {
+  await withSandbox(async (dir) => {
+    const files = await project(dir);
+    await writeConfig(dir, { ignoreFolders: ['src/theme.scss'] });
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 1);
+    assert.match(r.stderr, /is a file — move it to ignoreFiles/);
+    assert.deepEqual(await untouched(dir, files), files.slice().sort());
+  });
+});
+
+test('a folder listed under ignoreFiles aborts', async () => {
+  await withSandbox(async (dir) => {
+    const files = await project(dir);
+    await writeConfig(dir, { ignoreFiles: ['src/legacy'] });
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 1);
+    assert.match(r.stderr, /is a directory — move it to ignoreFolders/);
+    assert.deepEqual(await untouched(dir, files), files.slice().sort());
+  });
+});
+
+// The tool rewrites in place with no undo, so an unreadable config must stop
+// the run before a single file is touched.
+for (const [label, body] of [
+  ['malformed JSON', '{ "ignoreFolders": ["src/legacy",] }'],
+  ['a non-array value', '{ "ignoreFolders": "src/legacy" }'],
+  ['an array holding a non-string', '{ "ignoreFiles": ["ok.scss", 42] }'],
+  ['an array at the top level', '["src/legacy"]'],
+  ['a bare string at the top level', '"src/legacy"'],
+]) {
+  test(`invalid config (${label}) aborts without writing anything`, async () => {
+    await withSandbox(async (dir) => {
+      const files = await project(dir);
+      await writeFile(join(dir, 'force-important.json'), body);
+
+      const r = await runCli(dir);
+      assert.equal(r.code, 1, `expected exit 1, got ${r.code}`);
+      assert.match(r.stderr, /^✗ force-important\.json:/m);
+      assert.equal(r.stdout.trim(), '', 'should not report any work');
+      assert.deepEqual(await untouched(dir, files), files.slice().sort());
+    });
+  });
+}

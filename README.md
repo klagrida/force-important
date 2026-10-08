@@ -26,7 +26,7 @@ node_modules  dist  build  coverage  .git  .angular
 ```
 
 Everything else is fair game, so a folder like `src/.config/` **is** processed.
-The list is hardcoded — there is no `--ignore` flag.
+These are always excluded. To skip more, add a [config file](#config).
 
 ## Example
 
@@ -112,6 +112,67 @@ node --test --watch                                    # re-run on save
 > `test:one` does. (The path can be omitted entirely: `test/run.test.mjs`
 > matches node's default `*.test.mjs` discovery.)
 
+## Config
+
+Optional. Drop a `force-important.json` in the folder you run the tool from:
+
+```json
+{
+  "ignoreFolders": ["vendor", "src/legacy"],
+  "ignoreFiles": ["_variables.scss", "src/theme.scss"]
+}
+```
+
+Both keys are optional arrays of strings, and both follow the same rule:
+
+> **No slash → matches at any depth. Contains a slash → anchored to the root.**
+
+| Entry | Key | Matches |
+| --- | --- | --- |
+| `vendor` | `ignoreFolders` | every folder named `vendor`, at any depth |
+| `src/legacy` | `ignoreFolders` | only that one folder |
+| `_variables.scss` | `ignoreFiles` | that filename, at any depth |
+| `src/theme.scss` | `ignoreFiles` | only that one file |
+
+So you never write `**/` or `/**` yourself — `ignoreFolders` appends `/**`, and a
+slashless entry gets `**/` prefixed. Trailing slashes are trimmed. Explicit
+globs (`**/_*.scss`) are passed through untouched.
+
+Config entries **add to** the built-in ignore list above; they cannot shrink it,
+so `node_modules` and friends stay excluded whatever you write.
+
+When a config loads, the run says so:
+
+```
+config: force-important.json — 2 folders, 2 files
+✓ src/app/button.scss
+41 scanned, 12 changed
+```
+
+### When it refuses to run
+
+Because the tool rewrites files in place with no undo, a config it cannot
+understand aborts with exit `1` before touching anything:
+
+| Config | Result |
+| --- | --- |
+| Malformed JSON | `✗ invalid JSON — …`, exit 1 |
+| Not a JSON object at the top level | `✗ expected a JSON object …`, exit 1 |
+| `ignoreFolders` / `ignoreFiles` not an array of strings | `✗ "…" must be an array of strings`, exit 1 |
+| A file listed in `ignoreFolders` | `✗ … is a file — move it to ignoreFiles`, exit 1 |
+| A folder listed in `ignoreFiles` | `✗ … is a directory — move it to ignoreFolders`, exit 1 |
+
+These only warn, and the run continues:
+
+| Config | Result |
+| --- | --- |
+| An unknown key | `⚠ unknown key "…" — ignored` |
+| A folder that does not exist | `⚠ ignoreFolders: "…" — no such directory` |
+| A plain filename matching nothing | `⚠ ignoreFiles: "…" — matched no files` |
+
+An explicit glob that matches nothing is silent, since a glob may legitimately
+match nothing today.
+
 ## Dev only
 
 Exits immediately with code `0` when `NODE_ENV=production`.
@@ -164,10 +225,13 @@ is now skipped; covered by the `namespaced-variable` fixture.
 
 **Other limitations:**
 
-- Destructive: no backup, no dry run, no `--ignore` flag
+- Destructive: no backup, no dry run
 - `!important` inside a `@mixin` body affects every `@include` site
 - Sass maps and `@include` arguments are not declarations and are left alone
-- The ignore list is hardcoded
+- A folder named in `ignoreFolders` that does not exist only warns; the run
+  continues, so a typo means the folder you meant to protect is still rewritten
+- The config is read from `cwd` only — running the tool from a subfolder will
+  not find the project-root config
 
 ## Caveat
 

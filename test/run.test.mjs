@@ -89,10 +89,24 @@ test('a file needing no change is not reported as changed', async () => {
   });
 });
 
-test('ignores node_modules, dist, and .angular', async () => {
+const GENERATED = [
+  'node_modules/pkg',
+  'dist',
+  'build',
+  'coverage/lcov',
+  '.angular/cache',
+  '.next/static',
+  '.nuxt',
+  '.svelte-kit',
+  '.cache',
+  '.parcel-cache',
+  '.turbo',
+];
+
+test('ignores dependency and generated-output directories', async () => {
   await withSandbox(async (dir) => {
     const untouched = '.skip { color: hotpink; }\n';
-    for (const sub of ['node_modules/pkg', 'dist', '.angular/cache']) {
+    for (const sub of GENERATED) {
       await mkdir(join(dir, sub), { recursive: true });
       await writeFile(join(dir, sub, 'x.scss'), untouched);
     }
@@ -103,13 +117,66 @@ test('ignores node_modules, dist, and .angular', async () => {
     assert.equal(r.code, 0);
     assert.match(r.stdout, /1 scanned, 1 changed/);
 
-    for (const sub of ['node_modules/pkg', 'dist', '.angular/cache']) {
-      assert.equal(await readFile(join(dir, sub, 'x.scss'), 'utf8'), untouched);
+    for (const sub of GENERATED) {
+      assert.equal(
+        await readFile(join(dir, sub, 'x.scss'), 'utf8'),
+        untouched,
+        `${sub} should have been ignored`
+      );
     }
     assert.equal(
       norm(await readFile(join(dir, 'src', 'ok.scss'), 'utf8')),
       '.ok { color: red !important; }\n'
     );
+  });
+});
+
+test('recurses into every subfolder, including dot-directories', async () => {
+  await withSandbox(async (dir) => {
+    const paths = [
+      'a/b/c/d/e/f/deep.scss',
+      'my components/sp ace.scss',
+      'with (parens)/p.scss',
+      '_partial.scss',
+      '.hidden/h.scss',
+      'src/.config/c.scss',
+    ];
+    for (const rel of paths) {
+      await mkdir(dirname(join(dir, rel)), { recursive: true });
+      await writeFile(join(dir, rel), '.t { color: red; }\n');
+    }
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 0);
+    assert.match(r.stdout, new RegExp(`${paths.length} scanned, ${paths.length} changed`));
+
+    for (const rel of paths) {
+      assert.equal(
+        norm(await readFile(join(dir, rel), 'utf8')),
+        '.t { color: red !important; }\n',
+        `${rel} should have been processed`
+      );
+    }
+  });
+});
+
+test('matches .SCSS and .Scss as well as .scss', async () => {
+  await withSandbox(async (dir) => {
+    for (const name of ['a.scss', 'b.SCSS', 'c.Scss']) {
+      await writeFile(join(dir, name), '.t { color: red; }\n');
+    }
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 0);
+    assert.match(r.stdout, /3 scanned, 3 changed/);
+
+    for (const name of ['a.scss', 'b.SCSS', 'c.Scss']) {
+      assert.equal(
+        norm(await readFile(join(dir, name), 'utf8')),
+        '.t { color: red !important; }\n',
+        `${name} should have been processed`
+      );
+    }
   });
 });
 

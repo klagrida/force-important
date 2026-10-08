@@ -9,7 +9,22 @@ import scss from 'postcss-scss';
 if (process.env.NODE_ENV === 'production') process.exit(0);
 
 const cwd = process.cwd();
-const ignore = ['**/node_modules/**', '**/dist/**', '**/.git/**', '**/.angular/**'];
+// Dot-directories are scanned (see `dot: true` below), so generated output that
+// hides in one has to be excluded explicitly.
+const ignore = [
+  '**/node_modules/**',
+  '**/dist/**',
+  '**/build/**',
+  '**/coverage/**',
+  '**/.git/**',
+  '**/.angular/**',
+  '**/.next/**',
+  '**/.nuxt/**',
+  '**/.svelte-kit/**',
+  '**/.cache/**',
+  '**/.parcel-cache/**',
+  '**/.turbo/**',
+];
 
 function inKeyframes(node) {
   for (let p = node.parent; p; p = p.parent) {
@@ -37,7 +52,13 @@ async function transform(file) {
   return true;
 }
 
-const files = await fg('**/*.scss', { cwd, ignore, absolute: true });
+const files = await fg('**/*.scss', {
+  cwd,
+  ignore,
+  absolute: true,
+  dot: true, // without this, anything under a .folder is silently skipped
+  caseSensitiveMatch: false, // so .SCSS and .Scss are found too
+});
 const results = await Promise.allSettled(files.map(transform));
 
 let changed = 0;

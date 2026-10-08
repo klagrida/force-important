@@ -12,12 +12,21 @@ One pass, then it exits. **It rewrites files in place, so commit first.**
 
 ## What it does
 
-- Scans `**/*.scss` from `process.cwd()`
+- Scans `**/*.scss` from `process.cwd()`, recursively, at unlimited depth —
+  including dot-directories and `.SCSS` / `.Scss` spellings
 - Parses with `postcss-scss` (no regex)
 - Adds `!important` to declarations that lack it
 - Writes a file only if the result differs from the input
 
-Ignored directories: `node_modules`, `dist`, `.git`, `.angular`.
+Ignored directories (dependency trees and generated output):
+
+```
+node_modules  dist  build  coverage  .git  .angular
+.next  .nuxt  .svelte-kit  .cache  .parcel-cache  .turbo
+```
+
+Everything else is fair game, so a folder like `src/.config/` **is** processed.
+The list is hardcoded — there is no `--ignore` flag.
 
 ## Example
 

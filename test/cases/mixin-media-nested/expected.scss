@@ -1,0 +1,17 @@
+@mixin button {
+  padding: 4px !important;
+}
+
+@media (min-width: 600px) {
+  .m { top: 0 !important; }
+}
+
+@supports (display: grid) {
+  .s { display: grid !important; }
+}
+
+.parent {
+  color: red !important;
+  &:hover { color: blue !important; }
+  .child { left: 0 !important; }
+}

@@ -1,0 +1,14 @@
+@keyframes slide {
+  0% { opacity: 0; }
+  100% {
+    opacity: 1;
+    .inner { transform: none; }
+  }
+}
+
+@-webkit-keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.after { color: red !important; }

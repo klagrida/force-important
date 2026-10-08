@@ -62,6 +62,21 @@ means `font: { family: serif !important; }`, which Sass compiles to the valid
 A file that fails to parse is reported and skipped; the rest still run. Exit
 code is `1` if any file failed, otherwise `0`.
 
+## Tests
+
+```bash
+npm test
+```
+
+Each folder under `test/cases/` is a golden-file pair — `input.scss` and the
+`expected.scss` it must produce. The runner copies the input into a throwaway
+temp directory, runs the real CLI there, and compares the rewritten file to the
+expectation. Alongside those, the suite covers idempotency, the ignore list,
+exit codes, fail-soft behavior on an unparseable file, and the production guard.
+
+To add a case, create `test/cases/<name>/input.scss` + `expected.scss`; it is
+picked up automatically.
+
 ## Dev only
 
 Exits immediately with code `0` when `NODE_ENV=production`.

@@ -1,0 +1,8 @@
+$gap: 4px;
+
+.card {
+  --brand: #09f;
+  $local: 2px;
+  padding: $gap;
+  color: var(--brand);
+}

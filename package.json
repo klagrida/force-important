@@ -1,0 +1,13 @@
+{
+  "name": "force-important",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": { "force-important": "./cli.mjs" },
+  "files": ["cli.mjs"],
+  "dependencies": {
+    "chokidar": "^4.0.0",
+    "fast-glob": "^3.3.2",
+    "postcss": "^8.4.0",
+    "postcss-scss": "^4.0.9"
+  }
+}

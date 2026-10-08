@@ -79,6 +79,29 @@ exit codes, fail-soft behavior on an unparseable file, and the production guard.
 To add a case, create `test/cases/<name>/input.scss` + `expected.scss`; it is
 picked up automatically.
 
+### Running one test
+
+`--test-name-pattern` takes a regex matched against the test name:
+
+```bash
+npm run test:one -- keyframes          # one case
+npm run test:one -- "fixture: basic"   # quote names containing spaces
+```
+
+Or call node directly, which is the same thing:
+
+```bash
+node --test --test-name-pattern="fixture: keyframes"   # one case
+node --test --test-name-pattern="^fixture:"            # all golden-file cases
+node --test --watch                                    # re-run on save
+```
+
+> **Don't use `npm test -- --test-name-pattern=…`.** npm appends the flag after
+> the file path, where node ignores it — the filter is silently dropped and the
+> whole suite runs instead. The flag has to come before the path, which is what
+> `test:one` does. (The path can be omitted entirely: `test/run.test.mjs`
+> matches node's default `*.test.mjs` discovery.)
+
 ## Dev only
 
 Exits immediately with code `0` when `NODE_ENV=production`.

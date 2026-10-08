@@ -14,7 +14,8 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test test/run.test.mjs"
+    "test": "node --test test/run.test.mjs",
+    "test:one": "node --test --test-name-pattern"
   },
   "dependencies": {
     "fast-glob": "^3.3.3",

@@ -2,8 +2,24 @@
   "name": "force-important",
   "version": "0.1.0",
   "description": "Dev-only CLI that adds !important to every SCSS declaration that doesn't already have it.",
-  "type": "module",
+  "keywords": [
+    "scss",
+    "sass",
+    "css",
+    "important",
+    "postcss",
+    "codemod",
+    "cli"
+  ],
+  "homepage": "https://github.com/klagrida/force-important#readme",
+  "bugs": "https://github.com/klagrida/force-important/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/klagrida/force-important.git"
+  },
   "license": "MIT",
+  "author": "kgridou",
+  "type": "module",
   "bin": {
     "force-important": "./cli.mjs"
   },
@@ -15,7 +31,8 @@
   },
   "scripts": {
     "test": "node --test test/run.test.mjs",
-    "test:one": "node --test --test-name-pattern"
+    "test:one": "node --test --test-name-pattern",
+    "prepublishOnly": "npm test"
   },
   "dependencies": {
     "fast-glob": "^3.3.3",

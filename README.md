@@ -53,6 +53,7 @@ The list is hardcoded — there is no `--ignore` flag.
 | Case | Reason |
 | --- | --- |
 | `$variables` | not CSS declarations |
+| `namespace.$variables` | Sass module variable assignments — see below |
 | `--custom-props` | `!important` changes their semantics |
 | Declarations anywhere inside `@keyframes` | `!important` is invalid there |
 | Already `!important` | idempotent |
@@ -145,6 +146,21 @@ detectable from the SCSS: the value is just a variable name, and resolving it
 would mean evaluating Sass. Libraries that use `null` defaults heavily are
 affected — on Bootstrap 5.3 it produces 73 such declarations across 14
 properties. Covered by the `null-value` fixture.
+
+**Sass variable assignments must be skipped, not just `$`-prefixed ones.** With the
+Sass module system a variable can be assigned through its namespace:
+
+```scss
+sass-utils.$use-system-color-variables: map.get($config, use-system-variables) or false;
+```
+
+The prop here starts with `sass-utils.`, not `$`. Appending `!important` does not
+mark a declaration important — it changes the *value*, and `false !important` is
+truthy in Sass, so every `@if` reading that variable takes the other branch.
+Running an earlier version of this tool over Angular Material corrupted exactly
+this line and silently switched its whole typography system into
+CSS-variable mode, changing 611 lines of compiled CSS. Any prop containing `$`
+is now skipped; covered by the `namespaced-variable` fixture.
 
 **Other limitations:**
 

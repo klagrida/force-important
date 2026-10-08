@@ -1,0 +1,19 @@
+// Regression fixture. `namespace.$var:` is a Sass *variable assignment*, not a
+// CSS declaration, but its prop starts with the namespace rather than `$` — so a
+// `startsWith('$')` guard misses it. Appending !important there changes the
+// VALUE, because `false !important` is truthy in Sass, which silently flips
+// @if branches downstream.
+//
+// Found by running this tool over Angular Material: it corrupted
+// `sass-utils.$use-system-color-variables: ... or false;` and switched the whole
+// typography system to CSS-variable mode, changing 611 lines of compiled CSS.
+@use 'theme' as t;
+
+t.$use-system-variables: false;
+t.$density: 0;
+$local: false;
+
+.x {
+  color: red !important;
+  width: t.$size !important;
+}

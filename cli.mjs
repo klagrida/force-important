@@ -37,7 +37,11 @@ const plugin = {
   postcssPlugin: 'force-important',
   Declaration(decl) {
     if (decl.important) return;
-    if (decl.prop.startsWith('$') || decl.prop.startsWith('--')) return;
+    // A Sass variable assignment is not a CSS declaration. Covers both `$var:`
+    // and the module form `namespace.$var:`, whose prop starts with the
+    // namespace. Appending !important there changes the VALUE: `false !important`
+    // is truthy, which silently flips @if branches downstream.
+    if (decl.prop.includes('$') || decl.prop.startsWith('--')) return;
     if (inKeyframes(decl)) return;
     decl.important = true;
   },

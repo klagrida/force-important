@@ -1,5 +1,7 @@
 # force-important
 
+[![CI](https://github.com/klagrida/force-important/actions/workflows/ci.yml/badge.svg)](https://github.com/klagrida/force-important/actions/workflows/ci.yml)
+
 Dev-only CLI that adds `!important` to every SCSS declaration in the current folder that doesn't already have it.
 
 ```bash

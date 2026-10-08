@@ -1,0 +1,3 @@
+# Golden-file fixtures are compared byte for byte; keep them LF on every
+# platform so a Windows checkout can't change what the tests assert.
+*.scss text eol=lf

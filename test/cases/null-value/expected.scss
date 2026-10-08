@@ -1,0 +1,14 @@
+// Regression fixture for a known limitation — see "Known limitations" in the
+// README. Sass omits a declaration whose value is `null`, so `font-family`
+// below never reaches the compiled CSS. Once `!important` is appended the value
+// is no longer null, and Sass emits the invalid `font-family: !important;`.
+//
+// force-important cannot detect this: at SCSS level the value is just a
+// variable name, and resolving it would mean evaluating Sass. This fixture
+// pins the current behaviour so the day someone changes it, it is deliberate.
+$maybe: null;
+
+.x {
+  font-family: $maybe !important;
+  color: red !important;
+}

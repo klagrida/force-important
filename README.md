@@ -113,6 +113,37 @@ npx force-important               # no install
 npm i -D force-important          # or as a dev dependency
 ```
 
+## Known limitations
+
+**Null-valued declarations produce invalid CSS.** Sass omits a declaration whose
+value is `null`, but `!important` makes the value non-null, so Sass emits an
+empty declaration instead of dropping it:
+
+```scss
+$maybe: null;
+.x { font-family: $maybe; }
+```
+
+```css
+/* before: the declaration is omitted entirely */
+/* after:  */
+.x { font-family: !important; }
+```
+
+That is invalid CSS. Browsers discard the declaration, so nothing that worked
+before breaks, but the output is larger and will fail a CSS linter. This is not
+detectable from the SCSS: the value is just a variable name, and resolving it
+would mean evaluating Sass. Libraries that use `null` defaults heavily are
+affected — on Bootstrap 5.3 it produces 73 such declarations across 14
+properties. Covered by the `null-value` fixture.
+
+**Other limitations:**
+
+- Destructive: no backup, no dry run, no `--ignore` flag
+- `!important` inside a `@mixin` body affects every `@include` site
+- Sass maps and `@include` arguments are not declarations and are left alone
+- The ignore list is hardcoded
+
 ## Caveat
 
 Blanket `!important` makes specificity irrelevant — source order becomes the

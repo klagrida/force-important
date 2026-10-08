@@ -1,13 +1,15 @@
 {
   "name": "force-important",
   "version": "0.1.0",
+  "description": "Dev-only CLI that adds !important to every SCSS declaration that doesn't already have it.",
   "type": "module",
+  "license": "MIT",
   "bin": { "force-important": "./cli.mjs" },
   "files": ["cli.mjs"],
+  "engines": { "node": ">=18" },
   "dependencies": {
-    "chokidar": "^4.0.0",
-    "fast-glob": "^3.3.2",
-    "postcss": "^8.4.0",
+    "fast-glob": "^3.3.3",
+    "postcss": "^8.5.29",
     "postcss-scss": "^4.0.9"
   }
 }

@@ -1,25 +1,14 @@
 name: Publish
 
-# Publishes to npm when a GitHub Release is published. Create the release from a
-# tag like `v0.1.0`; the job refuses to run if that tag disagrees with the
-# version in package.json.
-#
-# Auth is npm trusted publishing (OIDC) — no NPM_TOKEN secret to store or
-# rotate, and provenance is attested automatically. One-time setup is required
-# before this can work; see "Releasing" in the README.
+# Press "Run workflow" on the Actions tab to publish.
+# The version is whatever package.json says — bump it first, since npm refuses
+# to republish a version that already exists.
 on:
-  release:
-    types: [published]
   workflow_dispatch:
-    inputs:
-      dry-run:
-        description: 'Pack and validate without publishing'
-        type: boolean
-        default: true
 
 permissions:
   contents: read
-  id-token: write # required for OIDC; without it npm falls back to needing a token
+  id-token: write # lets npm attest provenance
 
 jobs:
   publish:
@@ -32,33 +21,10 @@ jobs:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
-      # Trusted publishing needs a newer npm than Node 22 bundles.
-      - run: npm install -g npm@latest
-
       - run: npm ci
 
       - run: npm test
 
-      - name: Check the release tag matches package.json
-        if: github.event_name == 'release'
-        run: |
-          tag="${GITHUB_REF_NAME#v}"
-          pkg="$(node -p 'require("./package.json").version')"
-          if [ "$tag" != "$pkg" ]; then
-            echo "::error::tag $GITHUB_REF_NAME implies $tag but package.json says $pkg"
-            exit 1
-          fi
-          echo "version $pkg matches tag $GITHUB_REF_NAME"
-
-      - name: Pack and show what would ship
-        run: npm pack --dry-run
-
-      - name: Publish
-        if: github.event_name == 'release' || inputs.dry-run == false
-        run: npm publish
-        # If you would rather use a classic automation token than OIDC, drop the
-        # trusted-publisher setup, add an NPM_TOKEN repository secret, and
-        # replace the line above with:
-        #   run: npm publish --provenance
-        #   env:
-        #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

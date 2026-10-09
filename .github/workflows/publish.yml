@@ -25,6 +25,8 @@ jobs:
 
       - run: npm test
 
-      - run: npm publish --provenance
+      # --access public is required alongside --provenance for a package npm has
+      # not seen before; without it npm errors with EUSAGE.
+      - run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

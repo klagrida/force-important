@@ -21,7 +21,7 @@
   "author": "Khalil",
   "type": "module",
   "bin": {
-    "force-important": "./cli.mjs"
+    "force-important": "cli.mjs"
   },
   "files": [
     "cli.mjs"

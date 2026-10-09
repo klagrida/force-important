@@ -1,6 +1,7 @@
 # force-important
 
 [![CI](https://github.com/klagrida/force-important/actions/workflows/ci.yml/badge.svg)](https://github.com/klagrida/force-important/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/force-important)](https://www.npmjs.com/package/force-important)
 
 Dev-only CLI that adds `!important` to every SCSS declaration in the current folder that doesn't already have it.
 
@@ -25,8 +26,8 @@ node_modules  dist  build  coverage  .git  .angular
 .next  .nuxt  .svelte-kit  .cache  .parcel-cache  .turbo
 ```
 
-Everything else is fair game, so a folder like `src/.config/` **is** processed.
-These are always excluded. To skip more, add a [config file](#config).
+These are always excluded. Everything else is fair game, so a folder like
+`src/.config/` **is** processed. To skip more, add a [config file](#config).
 
 ## Example
 
@@ -65,10 +66,21 @@ means `font: { family: serif !important; }`, which Sass compiles to the valid
 
 ## Output
 
+Every run announces the version it is using, so output pasted into a bug report
+carries it:
+
 ```
+force-important 0.2.0
 ✓ src/button.scss
 ✗ src/broken.scss — Unclosed block
 12 scanned, 1 changed, 1 failed
+```
+
+To print just the version and exit, without scanning anything:
+
+```bash
+force-important --version    # or -v
+0.2.0
 ```
 
 A file that fails to parse is reported and skipped; the rest still run. Exit
@@ -114,16 +126,48 @@ node --test --watch                                    # re-run on save
 
 ## Config
 
-Optional. Drop a `force-important.json` in the folder you run the tool from:
+Optional. Create a `force-important.json` in the folder you run the tool from —
+your project root, next to `package.json`:
+
+```
+my-project/
+├── force-important.json   ← here
+├── package.json
+└── src/
+```
+
+All keys go at the top level, and all are optional, so a file with just one of
+them is valid:
+
+```json
+{
+  "onlySelectors": ["mat-"]
+}
+```
+
+The full shape:
 
 ```json
 {
   "ignoreFolders": ["vendor", "src/legacy"],
-  "ignoreFiles": ["_variables.scss", "src/theme.scss"]
+  "ignoreFiles": ["_variables.scss", "src/theme.scss"],
+  "onlySelectors": ["mat-"]
 }
 ```
 
-Both keys are optional arrays of strings, and both follow the same rule:
+The config is looked up in the current directory only — it is not searched for
+up the tree — so run the tool from the folder holding the file. If you don't see
+the `config:` line in the output, it wasn't found.
+
+| Key | Effect |
+| --- | --- |
+| `ignoreFolders` | folders to skip entirely |
+| `ignoreFiles` | individual files to skip |
+| `onlySelectors` | only force rules whose selector contains one of these — see [Targeting selectors](#targeting-selectors) |
+
+All three are optional arrays of strings. Unknown keys warn and are ignored.
+
+The two ignore keys follow the same path rule:
 
 > **No slash → matches at any depth. Contains a slash → anchored to the root.**
 
@@ -144,6 +188,7 @@ so `node_modules` and friends stay excluded whatever you write.
 When a config loads, the run says so:
 
 ```
+force-important 0.2.0
 config: force-important.json — 2 folders, 2 files
 ✓ src/app/button.scss
 41 scanned, 12 changed
@@ -235,46 +280,45 @@ npm i -D force-important          # or as a dev dependency
 
 ## Releasing
 
-Published by `.github/workflows/publish.yml` when a GitHub Release is published.
-The job runs the test suite, refuses to continue if the release tag disagrees
-with `package.json`, prints the tarball contents, then publishes.
-
-Auth is npm **trusted publishing** (OIDC): no `NPM_TOKEN` secret to store or
-rotate, and provenance is attested automatically.
-
-### One-time setup
-
-Trusted publishing can only be configured for a package that already exists on
-the registry, so the first version has to be published by hand:
+Publishing is done by `.github/workflows/publish.yml`, triggered by hand — there
+are no release tags and no GitHub Releases involved.
 
 ```bash
-npm login
-npm publish          # first release only
+gh workflow run publish.yml
 ```
 
-Then on npmjs.com, open the package's **Settings → Trusted Publisher**, choose
-GitHub Actions, and fill in:
+Or: Actions tab → **Publish** → **Run workflow**.
 
-| Field | Value |
-| --- | --- |
-| Organization or user | `klagrida` |
-| Repository | `force-important` |
-| Workflow filename | `publish.yml` |
+The job runs `npm ci`, then the full test suite, then
+`npm publish --provenance --access public`. A failing test aborts it, so a
+broken build cannot reach the registry.
 
-A new trusted-publisher configuration must complete a successful publish within
-**2 days** or it expires, so cut the next release soon after setting it up.
-
-### Each release after that
+The version comes from `package.json`, so **bump it before every run** — npm
+rejects republishing a version that already exists:
 
 ```bash
-npm version patch            # or minor / major — commits and tags
-git push --follow-tags
-gh release create "v$(node -p 'require("./package.json").version')" --generate-notes
+npm version patch --no-git-tag-version   # or minor / major
+git commit -am "0.1.1"
+git push
+gh workflow run publish.yml
 ```
 
-Publishing the release triggers the workflow. `workflow_dispatch` is also wired
-up with a `dry-run` input (default on) if you want to exercise everything except
-the publish itself.
+### Setup
+
+One repository secret is required: `NPM_TOKEN`.
+
+It must be a **Classic → Automation** token from npmjs.com → Access Tokens, or a
+Granular token with **Bypass 2FA** enabled and write access to the package.
+A Classic *Publish* token will not work — CI cannot answer a 2FA prompt, and the
+registry rejects it with `E403 … two-factor authentication … is required`.
+
+```bash
+gh secret set NPM_TOKEN
+```
+
+`--access public` is required alongside `--provenance` for a package the
+registry has not seen before; without it npm fails with
+`EUSAGE … you must set access to public`.
 
 ## Known limitations
 

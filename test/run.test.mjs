@@ -20,9 +20,9 @@ const norm = (s) => s.replace(/\r\n/g, '\n');
 
 const sandbox = () => mkdtemp(join(tmpdir(), 'force-important-'));
 
-async function runCli(cwd, env = {}) {
+async function runCli(cwd, env = {}, args = []) {
   try {
-    const { stdout, stderr } = await execFileAsync(process.execPath, [CLI], {
+    const { stdout, stderr } = await execFileAsync(process.execPath, [CLI, ...args], {
       cwd,
       env: { ...process.env, NODE_ENV: 'test', ...env },
     });
@@ -210,6 +210,44 @@ test('NODE_ENV=production touches nothing and exits 0', async () => {
     assert.equal(r.code, 0);
     assert.equal(r.stdout.trim(), '');
     assert.equal(await readFile(join(dir, 'style.scss'), 'utf8'), before);
+  });
+});
+
+const OWN_VERSION = JSON.parse(
+  await readFile(new URL('../package.json', import.meta.url), 'utf8')
+).version;
+
+test('a run announces the version it is using', async () => {
+  await withSandbox(async (dir) => {
+    await writeFile(join(dir, 'a.scss'), '.a { color: red; }\n');
+    const r = await runCli(dir);
+
+    assert.equal(r.code, 0);
+    assert.equal(r.stdout.split('\n')[0].trim(), `force-important ${OWN_VERSION}`);
+  });
+});
+
+for (const flag of ['--version', '-v']) {
+  test(`${flag} prints just the version and does no work`, async () => {
+    await withSandbox(async (dir) => {
+      const src = '.a { color: red; }\n';
+      await writeFile(join(dir, 'a.scss'), src);
+
+      const r = await runCli(dir, {}, [flag]);
+
+      assert.equal(r.code, 0);
+      assert.equal(r.stdout.trim(), OWN_VERSION);
+      assert.doesNotMatch(r.stdout, /scanned/);
+      assert.equal(await readFile(join(dir, 'a.scss'), 'utf8'), src);
+    });
+  });
+}
+
+test('--version still answers when NODE_ENV=production', async () => {
+  await withSandbox(async (dir) => {
+    const r = await runCli(dir, { NODE_ENV: 'production' }, ['--version']);
+    assert.equal(r.code, 0);
+    assert.equal(r.stdout.trim(), OWN_VERSION);
   });
 });
 
@@ -542,7 +580,10 @@ for (const [label, body] of [
       const r = await runCli(dir);
       assert.equal(r.code, 1, `expected exit 1, got ${r.code}`);
       assert.match(r.stderr, /^✗ force-important\.json:/m);
-      assert.equal(r.stdout.trim(), '', 'should not report any work');
+      // The version banner is still printed — it is diagnostic, not work — but
+      // nothing may be scanned, changed, or reported.
+      assert.equal(r.stdout.trim(), `force-important ${OWN_VERSION}`);
+      assert.doesNotMatch(r.stdout, /scanned|changed|✓/);
       assert.deepEqual(await untouched(dir, files), files.slice().sort());
     });
   });

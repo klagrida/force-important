@@ -6,7 +6,20 @@ import fg from 'fast-glob';
 import postcss from 'postcss';
 import scss from 'postcss-scss';
 
+// Read from the tool's own package.json, not the user's. `files` in
+// package.json only lists cli.mjs, but npm always ships package.json too, so
+// this resolves in an installed copy as well as in the repo.
+const { version } = JSON.parse(await readFile(new URL('./package.json', import.meta.url), 'utf8'));
+
+// Answered before the production guard so `--version` works everywhere.
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  console.log(version);
+  process.exit(0);
+}
+
 if (process.env.NODE_ENV === 'production') process.exit(0);
+
+console.log(`force-important ${version}`);
 
 const cwd = process.cwd();
 const CONFIG_FILE = 'force-important.json';

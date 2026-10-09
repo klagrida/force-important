@@ -184,6 +184,49 @@ npx force-important               # no install
 npm i -D force-important          # or as a dev dependency
 ```
 
+## Releasing
+
+Published by `.github/workflows/publish.yml` when a GitHub Release is published.
+The job runs the test suite, refuses to continue if the release tag disagrees
+with `package.json`, prints the tarball contents, then publishes.
+
+Auth is npm **trusted publishing** (OIDC): no `NPM_TOKEN` secret to store or
+rotate, and provenance is attested automatically.
+
+### One-time setup
+
+Trusted publishing can only be configured for a package that already exists on
+the registry, so the first version has to be published by hand:
+
+```bash
+npm login
+npm publish          # first release only
+```
+
+Then on npmjs.com, open the package's **Settings → Trusted Publisher**, choose
+GitHub Actions, and fill in:
+
+| Field | Value |
+| --- | --- |
+| Organization or user | `klagrida` |
+| Repository | `force-important` |
+| Workflow filename | `publish.yml` |
+
+A new trusted-publisher configuration must complete a successful publish within
+**2 days** or it expires, so cut the next release soon after setting it up.
+
+### Each release after that
+
+```bash
+npm version patch            # or minor / major — commits and tags
+git push --follow-tags
+gh release create "v$(node -p 'require("./package.json").version')" --generate-notes
+```
+
+Publishing the release triggers the workflow. `workflow_dispatch` is also wired
+up with a `dry-run` input (default on) if you want to exercise everything except
+the publish itself.
+
 ## Known limitations
 
 **Null-valued declarations produce invalid CSS.** Sass omits a declaration whose

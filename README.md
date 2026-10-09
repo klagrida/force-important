@@ -149,6 +149,55 @@ config: force-important.json — 2 folders, 2 files
 41 scanned, 12 changed
 ```
 
+### Targeting selectors
+
+By default every declaration in every scanned file is forced. `onlySelectors`
+narrows that to rules whose selector contains one of the given substrings —
+useful for overriding a component library without touching your own CSS:
+
+```json
+{
+  "onlySelectors": ["mat-", ".legacy"]
+}
+```
+
+```scss
+// before
+.mat-mdc-button { color: red; }
+.my-card        { color: blue; }
+
+// after
+.mat-mdc-button { color: red !important; }
+.my-card        { color: blue; }
+```
+
+Plain substring matching, case-sensitive — not a glob or a regex.
+
+**Nesting counts.** `.mat-card { .inner { … } }` compiles to `.mat-card .inner`,
+so a match on any *ancestor* selector carries down:
+
+```scss
+.mat-card {
+  top: 0 !important;              // matched directly
+  .inner { left: 0 !important; }  // matched via the ancestor
+}
+.plain {
+  .inner { right: 0; }            // no match anywhere in the chain
+}
+```
+
+This also means a declaration with **no enclosing selector is never matched** —
+a bare `@mixin` body has no knowable final selector, so `onlySelectors` leaves
+mixins alone entirely. That sidesteps the `@include`-propagation hazard, but it
+does mean styles applied through a mixin won't be forced.
+
+An omitted or empty array means "everything", the default. A pattern that
+matches nothing warns:
+
+```
+⚠ force-important.json: onlySelectors: "nope-" — matched no selectors
+```
+
 ### When it refuses to run
 
 Because the tool rewrites files in place with no undo, a config it cannot
@@ -158,7 +207,7 @@ understand aborts with exit `1` before touching anything:
 | --- | --- |
 | Malformed JSON | `✗ invalid JSON — …`, exit 1 |
 | Not a JSON object at the top level | `✗ expected a JSON object …`, exit 1 |
-| `ignoreFolders` / `ignoreFiles` not an array of strings | `✗ "…" must be an array of strings`, exit 1 |
+| `ignoreFolders` / `ignoreFiles` / `onlySelectors` not an array of strings | `✗ "…" must be an array of strings`, exit 1 |
 | A file listed in `ignoreFolders` | `✗ … is a file — move it to ignoreFiles`, exit 1 |
 | A folder listed in `ignoreFiles` | `✗ … is a directory — move it to ignoreFolders`, exit 1 |
 

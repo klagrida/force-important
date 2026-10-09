@@ -419,6 +419,110 @@ test('a folder listed under ignoreFiles aborts', async () => {
   });
 });
 
+test('onlySelectors: only matching rules are forced', async () => {
+  await withSandbox(async (dir) => {
+    await writeFile(
+      join(dir, 'a.scss'),
+      '.mat-button {\n  color: red;\n}\n\n.my-card {\n  color: blue;\n}\n'
+    );
+    await writeConfig(dir, { onlySelectors: ['mat-'] });
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 0);
+    assert.match(r.stdout, /only 1 selector/);
+    assert.equal(
+      norm(await readFile(join(dir, 'a.scss'), 'utf8')),
+      '.mat-button {\n  color: red !important;\n}\n\n.my-card {\n  color: blue;\n}\n'
+    );
+  });
+});
+
+test('onlySelectors: a matching ancestor carries down to nested rules', async () => {
+  await withSandbox(async (dir) => {
+    // `.mat-card .inner` contains "mat-" once compiled, so it must be forced
+    await writeFile(
+      join(dir, 'a.scss'),
+      '.mat-card {\n  top: 0;\n  .inner { left: 0; }\n}\n.plain {\n  .inner { right: 0; }\n}\n'
+    );
+    await writeConfig(dir, { onlySelectors: ['mat-'] });
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 0);
+    assert.equal(
+      norm(await readFile(join(dir, 'a.scss'), 'utf8')),
+      '.mat-card {\n  top: 0 !important;\n  .inner { left: 0 !important; }\n}\n' +
+        '.plain {\n  .inner { right: 0; }\n}\n'
+    );
+  });
+});
+
+test('onlySelectors: matching works through @media', async () => {
+  await withSandbox(async (dir) => {
+    await writeFile(
+      join(dir, 'a.scss'),
+      '@media (min-width: 600px) {\n  .mat-chip { bottom: 0; }\n  .plain { bottom: 0; }\n}\n'
+    );
+    await writeConfig(dir, { onlySelectors: ['mat-'] });
+
+    await runCli(dir);
+    assert.equal(
+      norm(await readFile(join(dir, 'a.scss'), 'utf8')),
+      '@media (min-width: 600px) {\n  .mat-chip { bottom: 0 !important; }\n  .plain { bottom: 0; }\n}\n'
+    );
+  });
+});
+
+test('onlySelectors: a declaration with no enclosing selector is left alone', async () => {
+  await withSandbox(async (dir) => {
+    // a bare @mixin body has no knowable final selector
+    const src = '@mixin helper {\n  padding: 9px;\n}\n';
+    await writeFile(join(dir, 'a.scss'), src);
+    await writeConfig(dir, { onlySelectors: ['mat-'] });
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 0);
+    assert.match(r.stdout, /1 scanned, 0 changed/);
+    assert.equal(norm(await readFile(join(dir, 'a.scss'), 'utf8')), src);
+  });
+});
+
+test('onlySelectors: @keyframes stays excluded even when its name matches', async () => {
+  await withSandbox(async (dir) => {
+    const src = '@keyframes mat-spin {\n  from { opacity: 0; }\n}\n';
+    await writeFile(join(dir, 'a.scss'), src);
+    await writeConfig(dir, { onlySelectors: ['mat-'] });
+
+    await runCli(dir);
+    assert.equal(norm(await readFile(join(dir, 'a.scss'), 'utf8')), src);
+  });
+});
+
+test('onlySelectors: a pattern matching nothing warns but the run proceeds', async () => {
+  await withSandbox(async (dir) => {
+    await writeFile(join(dir, 'a.scss'), '.mat-x { color: red; }\n');
+    await writeConfig(dir, { onlySelectors: ['mat-', 'nope-'] });
+
+    const r = await runCli(dir);
+    assert.equal(r.code, 0);
+    assert.match(r.stderr, /onlySelectors: "nope-" — matched no selectors/);
+    assert.doesNotMatch(r.stderr, /"mat-"/);
+    assert.match(r.stdout, /1 scanned, 1 changed/);
+  });
+});
+
+test('onlySelectors: an empty array behaves as if absent', async () => {
+  await withSandbox(async (dir) => {
+    await writeFile(join(dir, 'a.scss'), '.anything { color: red; }\n');
+    await writeConfig(dir, { onlySelectors: [] });
+
+    await runCli(dir);
+    assert.equal(
+      norm(await readFile(join(dir, 'a.scss'), 'utf8')),
+      '.anything { color: red !important; }\n'
+    );
+  });
+});
+
 // The tool rewrites in place with no undo, so an unreadable config must stop
 // the run before a single file is touched.
 for (const [label, body] of [
@@ -427,6 +531,8 @@ for (const [label, body] of [
   ['an array holding a non-string', '{ "ignoreFiles": ["ok.scss", 42] }'],
   ['an array at the top level', '["src/legacy"]'],
   ['a bare string at the top level', '"src/legacy"'],
+  ['onlySelectors as a string', '{ "onlySelectors": "mat-" }'],
+  ['onlySelectors holding a number', '{ "onlySelectors": ["mat-", 7] }'],
 ]) {
   test(`invalid config (${label}) aborts without writing anything`, async () => {
     await withSandbox(async (dir) => {

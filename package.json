@@ -1,6 +1,6 @@
 {
   "name": "force-important",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Dev-only CLI that adds !important to every SCSS declaration that doesn't already have it.",
   "keywords": [
     "scss",

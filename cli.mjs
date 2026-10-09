@@ -10,7 +10,7 @@ if (process.env.NODE_ENV === 'production') process.exit(0);
 
 const cwd = process.cwd();
 const CONFIG_FILE = 'force-important.json';
-const CONFIG_KEYS = ['ignoreFolders', 'ignoreFiles'];
+const CONFIG_KEYS = ['ignoreFolders', 'ignoreFiles', 'onlySelectors'];
 
 // Dot-directories are scanned (see `dot: true` below), so generated output that
 // hides in one has to be excluded explicitly. A config file can add to this
@@ -134,23 +134,50 @@ function inKeyframes(node) {
   return false;
 }
 
-const plugin = {
-  postcssPlugin: 'force-important',
-  Declaration(decl) {
-    if (decl.important) return;
-    // A Sass variable assignment is not a CSS declaration. Covers both `$var:`
-    // and the module form `namespace.$var:`, whose prop starts with the
-    // namespace. Appending !important there changes the VALUE: `false !important`
-    // is truthy, which silently flips @if branches downstream.
-    if (decl.prop.includes('$') || decl.prop.startsWith('--')) return;
-    if (inKeyframes(decl)) return;
-    decl.important = true;
-  },
-};
+// Every selector this declaration will end up under, innermost first. Nesting
+// matters: `.mat-card { .inner { top: 0 } }` compiles to `.mat-card .inner`, so
+// an ancestor's selector counts as much as the immediate parent's.
+function selectorChain(decl) {
+  const chain = [];
+  for (let p = decl.parent; p; p = p.parent) {
+    if (p.type === 'rule' && p.selector) chain.push(p.selector);
+  }
+  return chain;
+}
 
-async function transform(file) {
+// `hits` counts how many declarations each onlySelectors entry matched, so a
+// pattern that never matched anything can be reported at the end.
+function makePlugin(onlySelectors, hits) {
+  return {
+    postcssPlugin: 'force-important',
+    Declaration(decl) {
+      if (decl.important) return;
+      // A Sass variable assignment is not a CSS declaration. Covers both `$var:`
+      // and the module form `namespace.$var:`, whose prop starts with the
+      // namespace. Appending !important there changes the VALUE: `false !important`
+      // is truthy, which silently flips @if branches downstream.
+      if (decl.prop.includes('$') || decl.prop.startsWith('--')) return;
+      if (inKeyframes(decl)) return;
+
+      if (onlySelectors.length) {
+        const chain = selectorChain(decl);
+        // No enclosing selector at all — a bare @mixin body, say — means the
+        // final selector is unknowable here, so it cannot be matched.
+        const matched = onlySelectors.filter((needle) =>
+          chain.some((selector) => selector.includes(needle))
+        );
+        if (!matched.length) return;
+        for (const needle of matched) hits.set(needle, (hits.get(needle) ?? 0) + 1);
+      }
+
+      decl.important = true;
+    },
+  };
+}
+
+async function transform(file, processor) {
   const input = await readFile(file, 'utf8');
-  const { css } = await postcss([plugin]).process(input, { from: file, syntax: scss });
+  const { css } = await processor.process(input, { from: file, syntax: scss });
   if (css === input) return false;
   await writeFile(file, css);
   console.log('✓', relative(cwd, file));
@@ -159,16 +186,23 @@ async function transform(file) {
 
 const config = await readConfig();
 const ignore = await buildIgnore(config);
+const onlySelectors = config?.onlySelectors ?? [];
 
 if (config) {
-  const folders = config.ignoreFolders.length;
-  const files = config.ignoreFiles.length;
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-  console.log(`config: ${CONFIG_FILE} — ${plural(folders, 'folder')}, ${plural(files, 'file')}`);
+  const parts = [
+    plural(config.ignoreFolders.length, 'folder'),
+    plural(config.ignoreFiles.length, 'file'),
+  ];
+  if (onlySelectors.length) parts.push(`only ${plural(onlySelectors.length, 'selector')}`);
+  console.log(`config: ${CONFIG_FILE} — ${parts.join(', ')}`);
 }
 
+const hits = new Map();
+const processor = postcss([makePlugin(onlySelectors, hits)]);
+
 const files = await fg('**/*.scss', { ...GLOB_OPTIONS, ignore, absolute: true });
-const results = await Promise.allSettled(files.map(transform));
+const results = await Promise.allSettled(files.map((file) => transform(file, processor)));
 
 let changed = 0;
 const failed = [];
@@ -179,6 +213,10 @@ results.forEach((r, i) => {
 
 for (const [file, err] of failed) {
   console.error('✗', relative(cwd, file), '—', err?.reason ?? err?.message ?? err);
+}
+
+for (const needle of onlySelectors) {
+  if (!hits.has(needle)) warn(`onlySelectors: "${needle}" — matched no selectors`);
 }
 
 console.log(
